@@ -1,4 +1,6 @@
-// TungTung - szkielet gry platformowej JS/Canvas
+// TungTung - szkielet gry platformowej JS/Canvas z Sahurem (pixelart + animacje)
+
+import { SAHUR_SPRITES, SAHUR_COLORS, drawSahurSprite } from './assets/sahur_sprites.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -9,17 +11,20 @@ const HEIGHT = canvas.height;
 // Podstawowe dane gracza
 const player = {
     x: 100, y: HEIGHT - 90,
-    w: 32, h: 48,
+    w: 16, h: 24,
     dx: 0, dy: 0,
-    speed: 3,
-    jumpPower: 12,
-    gravity: 0.7,
+    speed: 2.1,
+    jumpPower: 8,
+    gravity: 0.5,
     onGround: false,
-    color: '#5ad',
     facing: 1, // 1 = prawo, -1 = lewo
+    state: 'idle', // idle, run, attack
+    anim: 0,
+    animTime: 0,
+    attackTime: 0,
 };
 
-// Platformy przykładowe (do generowania proceduralnego później)
+// Platformy przykładowe
 let platforms = [
     { x: 0, y: HEIGHT - 40, w: WIDTH, h: 40 },
     { x: 200, y: HEIGHT - 120, w: 100, h: 20 },
@@ -31,17 +36,19 @@ const keys = {};
 window.addEventListener('keydown', e => { keys[e.key] = true; });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-// Prosta funkcja rysująca gracza (do zamiany na pixelart)
-function drawPlayer() {
-    ctx.save();
-    ctx.translate(player.x + player.w/2, player.y + player.h/2);
-    ctx.scale(player.facing, 1);
-    ctx.fillStyle = player.color;
-    ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
-    // Pała (prosty prostokąt na prawo/lewo)
-    ctx.fillStyle = '#c96';
-    ctx.fillRect(player.facing*10, 10, 18, 4);
-    ctx.restore();
+// Animacja gracza - wybiera klatkę sprite'a na podstawie stanu
+function getSahurFrame() {
+    if (player.state === 'attack') {
+        if (player.facing === 1) return 6;
+        return 7;
+    }
+    if (player.state === 'run') {
+        if (player.facing === 1) return 2 + (player.anim % 2);
+        return 4 + (player.anim % 2);
+    }
+    // idle
+    if (player.facing === 1) return 0;
+    return 1;
 }
 
 // Platformy
@@ -53,12 +60,15 @@ function drawPlatforms() {
 // Fizyka ruchu i kolizje
 function updatePlayer() {
     // Ruch poziomy
+    let moving = false;
     if (keys['ArrowRight'] || keys['d']) {
         player.dx = player.speed;
         player.facing = 1;
+        moving = true;
     } else if (keys['ArrowLeft'] || keys['a']) {
         player.dx = -player.speed;
         player.facing = -1;
+        moving = true;
     } else {
         player.dx = 0;
     }
@@ -68,6 +78,35 @@ function updatePlayer() {
         player.dy = -player.jumpPower;
         player.onGround = false;
     }
+    // Atak
+    if ((keys['k'] || keys['K']) && player.attackTime <= 0) {
+        player.state = 'attack';
+        player.attackTime = 0.22; // sekundy
+        player.animTime = 0;
+    }
+
+    // Zarządzanie stanami animacji
+    if (player.attackTime > 0) {
+        player.attackTime -= 1/60;
+        if (player.attackTime <= 0) {
+            player.state = moving ? 'run' : 'idle';
+        }
+    } else {
+        player.state = moving ? 'run' : 'idle';
+    }
+
+    // Animacja biegu
+    if (player.state === 'run') {
+        player.animTime += 1/60;
+        if (player.animTime > 0.12) {
+            player.anim = (player.anim + 1) % 2;
+            player.animTime = 0;
+        }
+    } else {
+        player.anim = 0;
+        player.animTime = 0;
+    }
+
     // Grawitacja
     player.dy += player.gravity;
 
@@ -105,7 +144,13 @@ function gameLoop() {
 
     // Rysuj świat
     drawPlatforms();
-    drawPlayer();
+
+    // Rysuj Sahura (pixelart)
+    const frame = getSahurFrame();
+    // left-facing klatki są lustrzanym odbiciem right-facing
+    let flip = false;
+    if (frame === 1 || frame === 4 || frame === 5 || frame === 7) flip = true;
+    drawSahurSprite(ctx, Math.round(player.x), Math.round(player.y), frame, flip);
 
     // Fizyka
     updatePlayer();
